@@ -32,8 +32,14 @@ const BY_AGE: Partial<Record<TargetGroup, (age: number) => boolean>> = {
   중장년: (a) => a >= 40,
 }
 
-const ageRange = (min?: number, max?: number) =>
-  min != null && max != null ? `만 ${min}~${max}세` : max != null ? `만 ${max}세 이하` : `만 ${min}세 이상`
+export const ageRange = (min?: number, max?: number) =>
+  min != null && max != null
+    ? `만 ${min}~${max}세`
+    : max != null
+      ? `만 ${max}세 이하`
+      : min != null
+        ? `만 ${min}세 이상`
+        : '나이 제한 없음'
 
 export function judgeRule(rule: EligibilityRule, profile: UserProfile): RuleResult {
   const r = (result: RuleResult['result'], reason: string): RuleResult => ({ rule, result, reason })

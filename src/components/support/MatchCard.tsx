@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { type ReactNode, useState } from 'react'
 import { Badge } from '@/components/Badge'
 import { Card } from '@/components/Card'
 import { DataBadge } from '@/components/DataBadge'
 import { Icon } from '@/components/Icon'
 import { cx } from '@/lib/cx'
-import type { MatchResult } from '@/services/supportMatch/types'
+import type { MatchResult, MatchVerdict, UserProfile } from '@/services/supportMatch/types'
+import { Quote, RuleChecklist } from './RuleChecklist'
 
 const won = (m: number) =>
   m >= 10000 ? `${(m / 10000).toFixed(1).replace(/\.0$/, '')}억원` : `${m.toLocaleString()}만원`
@@ -16,21 +17,57 @@ function DayBadge({ daysLeft }: { daysLeft: number | null }) {
   return <Badge tone="neutral">D-{daysLeft}</Badge>
 }
 
-const RESULT_LABEL = { pass: '충족', fail: '미충족', unknown: '확인 필요' } as const
-const RESULT_CLS = { pass: 'text-pos', fail: 'text-neg', unknown: 'text-warn' } as const
-
-function Quote({ children }: { children: string }) {
-  return <p className="mt-1 border-l-2 border-line pl-3 text-xs text-faint">&ldquo;{children}&rdquo;</p>
+// A. 신호등 4종 (명세 6-A). 색 점 + 글자 라벨, 이모지 대신 Badge
+const VERDICT: Record<MatchVerdict, { tone: 'pos' | 'neutral' | 'warn' | 'neg'; label: string }> = {
+  '자격 충족': { tone: 'pos', label: '자격 충족' },
+  '확인 필요': { tone: 'neutral', label: '확인 필요' },
+  조건부: { tone: 'warn', label: '한 걸음 더' },
+  '자격 미달': { tone: 'neg', label: '해당 안 됨' },
 }
 
-export function MatchCard({ result: r }: { result: MatchResult }) {
+export function VerdictBadge({ verdict }: { verdict: MatchVerdict }) {
+  const v = VERDICT[verdict]
+  return (
+    <Badge tone={v.tone}>
+      <span aria-hidden="true" className="mr-1.5 size-1.5 rounded-full bg-current" />
+      {v.label}
+    </Badge>
+  )
+}
+
+function Section({
+  label,
+  icon,
+  cls,
+  children,
+}: {
+  label: string
+  icon: 'check' | 'info' | 'flag'
+  cls: string
+  children: ReactNode
+}) {
+  return (
+    <section aria-label={label}>
+      <p className={cx('flex items-center gap-1.5 text-xs font-bold', cls)}>
+        <Icon name={icon} size={13} />
+        {label}
+      </p>
+      <ul className="mt-2 flex flex-col gap-2.5">{children}</ul>
+    </section>
+  )
+}
+
+export function MatchCard({ result: r, profile }: { result: MatchResult; profile: UserProfile }) {
   const [open, setOpen] = useState(false)
   const p = r.program
+  const failed = r.rules.filter((x) => x.result === 'fail')
   const unknown = r.rules.filter((x) => x.result === 'unknown')
   const meta = [
     p.agency,
-    p.amountMaxManwon != null ? `최대 ${won(p.amountMaxManwon)}` : null,
+    p.amountMaxManwon != null ? `1인 최대 ${won(p.amountMaxManwon)}` : null,
     p.interestRate ?? null,
+    p.supportDetail ?? null,
+    p.totalBudgetText ? `사업 전체 예산 ${p.totalBudgetText}` : null,
   ].filter(Boolean)
 
   return (
@@ -41,7 +78,7 @@ export function MatchCard({ result: r }: { result: MatchResult }) {
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <Badge tone={r.verdict === '자격 충족' ? 'pos' : 'warn'}>{r.verdict}</Badge>
+        <VerdictBadge verdict={r.verdict} />
         <DayBadge daysLeft={r.daysLeft} />
         {p.supportTypes.map((t) => (
           <Badge key={t} tone={t === '융자' ? 'violet' : 'info'}>
@@ -56,62 +93,61 @@ export function MatchCard({ result: r }: { result: MatchResult }) {
           <h3 className="text-[17px] font-bold text-ink">{p.title}</h3>
           <p className="mt-1 text-[13px] text-muted">{meta.join(' · ')}</p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="text-sm font-bold text-primary-600 tnum">매칭 {r.score}점</span>
-          <DataBadge kind="self" />
-        </div>
+        {/* 조건부는 추천이 아니므로 매칭 점수를 보여주지 않는다 */}
+        {r.verdict !== '조건부' && (
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="text-sm font-bold text-primary-600 tnum">매칭 {r.score}점</span>
+            <DataBadge kind="self" />
+          </div>
+        )}
       </div>
 
       <p className="text-[15px] font-bold text-ink">{r.headline}</p>
 
+      {failed.length > 0 && (
+        <Section label="맞지 않는 조건" icon="flag" cls="text-warn">
+          {failed.map((x) => (
+            <li key={x.rule.kind + x.reason} className="text-sm leading-relaxed text-ink-soft">
+              {x.reason}
+              <Quote section={x.rule.section}>{x.rule.quote}</Quote>
+            </li>
+          ))}
+        </Section>
+      )}
+
       {r.reasons.length > 0 && (
-        <section aria-label="왜 맞나요">
-          <p className="flex items-center gap-1.5 text-xs font-bold text-pos">
-            <Icon name="check" size={13} />왜 맞나요
-          </p>
-          <ul className="mt-2 flex flex-col gap-2.5">
-            {r.reasons.map((x) => (
-              <li key={x.chunkId + x.text} className="text-sm leading-relaxed text-ink-soft">
-                {x.text}
-                <Quote>{x.quote}</Quote>
-              </li>
-            ))}
-          </ul>
-        </section>
+        <Section label="왜 맞나요" icon="check" cls="text-pos">
+          {r.reasons.map((x) => (
+            <li key={x.chunkId + x.text} className="text-sm leading-relaxed text-ink-soft">
+              {x.text}
+              <Quote>{x.quote}</Quote>
+            </li>
+          ))}
+        </Section>
       )}
 
       {unknown.length > 0 && (
-        <section aria-label="확인이 필요해요">
-          <p className="flex items-center gap-1.5 text-xs font-bold text-warn">
-            <Icon name="info" size={13} />확인이 필요해요
-          </p>
-          <ul className="mt-2 flex flex-col gap-1.5">
-            {unknown.map((x) => (
-              <li key={x.rule.kind + x.reason} className="text-sm text-ink-soft">
-                {x.reason}
-                <Quote>{x.rule.quote}</Quote>
-              </li>
-            ))}
-          </ul>
-        </section>
+        <Section label="확인이 필요해요" icon="info" cls="text-muted">
+          {unknown.map((x) => (
+            <li key={x.rule.kind + x.reason} className="text-sm text-ink-soft">
+              {x.reason}
+              <Quote section={x.rule.section}>{x.rule.quote}</Quote>
+            </li>
+          ))}
+          {p.contact && <li className="text-xs text-muted">문의: {p.contact}</li>}
+        </Section>
       )}
 
       {r.cautions.length > 0 && (
-        <section aria-label="유의사항">
-          <p className="flex items-center gap-1.5 text-xs font-bold text-muted">
-            <Icon name="flag" size={13} />유의사항
-          </p>
-          <ul className="mt-2 flex flex-col gap-2.5">
-            {r.cautions.map((x) => (
-              <li key={x.chunkId + x.text} className="text-sm leading-relaxed text-ink-soft">
-                {x.text}
-                <Quote>{x.quote}</Quote>
-              </li>
-            ))}
-          </ul>
-        </section>
+        <Section label="유의사항" icon="flag" cls="text-muted">
+          {r.cautions.map((x) => (
+            <li key={x.chunkId + x.text} className="text-sm leading-relaxed text-ink-soft">
+              {x.text}
+              <Quote>{x.quote}</Quote>
+            </li>
+          ))}
+        </Section>
       )}
-
 
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
         <a
@@ -129,26 +165,12 @@ export function MatchCard({ result: r }: { result: MatchResult }) {
           onClick={() => setOpen((v) => !v)}
           className="inline-flex min-h-10 items-center gap-1 text-sm font-semibold text-muted"
         >
-          조건별 판정 자세히
+          조건 체크리스트
           <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} />
         </button>
       </div>
 
-      {open && (
-        <ul className="flex flex-col divide-y divide-line rounded-panel border border-line bg-surface">
-          {r.rules.map((x) => (
-            <li key={x.rule.kind + x.reason} className="flex flex-col gap-0.5 px-3.5 py-2.5 text-sm">
-              <span className="flex items-center justify-between gap-3">
-                <span className="text-ink-soft">{x.reason}</span>
-                <span className={cx('shrink-0 text-xs font-bold', RESULT_CLS[x.result])}>
-                  {RESULT_LABEL[x.result]}
-                </span>
-              </span>
-              <Quote>{x.rule.quote}</Quote>
-            </li>
-          ))}
-        </ul>
-      )}
+      {open && <RuleChecklist rules={r.rules} profile={profile} />}
     </Card>
   )
 }

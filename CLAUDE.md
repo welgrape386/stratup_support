@@ -43,4 +43,5 @@ Vite + React 19 + TypeScript + Tailwind v4 + react-router-dom 7. 서버 함수�
 - Phase 1 완료: `config/eligibility/score/validate/mock.ts` + `match.check.ts`. 세부 결정은 SPEC 8-1
 - Phase 1b·1c: types 보강(3-2a), 판정 4종(조건부, `conditional` 분리), `whatIf.ts`, 테스트 #11~15
 - **임시 코드:** `src/services/supportMatch/uiPlaceholder.ts`와 `client.ts`의 개발 모드 폴백 분기. Phase 3에서 API 연결 후 삭제.
-- 다음: Phase 2 — 먼저 `incheon-samples.json`으로 자격 규칙 추출이 되는지 확인
+- **보류:** Phase 2(LLM 규칙 추출)·Phase 3(API 연동) — 당분간 `ANTHROPIC_API_KEY`를 쓰지 않는다. `scripts/extract-rules.ts`, `data/eval/rule-gold.json`, `@anthropic-ai/sdk`는 나중에 쓰므로 지우지 않는다.
+- Phase 4(키 없이 먼저): `/support-match`에 A(신호등)·B(`RuleChecklist`)·C(`NextSteps`) 반영. 데이터는 `uiPlaceholder.ts`가 mock + 실제 규칙 코드(partition·score·whatIf)로 만든다. 조건부는 `results`가 아니라 C 영역에만.

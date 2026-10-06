@@ -1,4 +1,3 @@
-import { extractAge } from '@/lib/parse'
 import type { SupportMatchRequest, SupportMatchResponse } from './types'
 import { buildUiPlaceholder } from './uiPlaceholder'
 import { inputError } from './validate'
@@ -30,12 +29,12 @@ export async function fetchSupportMatch(req: SupportMatchRequest): Promise<Suppo
       body: JSON.stringify({ ...req, text }),
     })
   } catch {
-    if (import.meta.env.DEV) return buildUiPlaceholder(text, req.overrides, extractAge(text))
+    if (import.meta.env.DEV) return buildUiPlaceholder(text, req.overrides)
     throw new SupportMatchApiError('INTERNAL', '서버에 연결하지 못했어요.')
   }
 
   if (res.status === 404 && import.meta.env.DEV)
-    return buildUiPlaceholder(text, req.overrides, extractAge(text))
+    return buildUiPlaceholder(text, req.overrides)
 
   const body = await res.json().catch(() => null)
   if (!res.ok) {

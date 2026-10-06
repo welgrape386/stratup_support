@@ -220,7 +220,8 @@ function compare(gold: Gold['expected'], rules: EligibilityRule[], norm: ReturnT
     ['rolling (코드)', show(gold.rolling), show(norm.rolling), norm.rolling === gold.rolling],
     ['amountMaxManwon', show(gold.amountMaxManwon), show(ex.amountMax?.manwon ?? null), (ex.amountMax?.manwon ?? null) === gold.amountMaxManwon],
     ['totalBudgetText (코드)', show(gold.totalBudgetText), show(norm.totalBudgetText), norm.totalBudgetText === gold.totalBudgetText],
-    ['지원유형', show(gold.supportTypes), show(ex.supportTypes), sameSet(ex.supportTypes, gold.supportTypes)],
+    ['지원유형 (엄격: 집합 일치)', show(gold.supportTypes), show(ex.supportTypes), sameSet(ex.supportTypes, gold.supportTypes)],
+    ['지원유형 (관대: 정답 포함)', show(gold.supportTypes), show(ex.supportTypes), gold.supportTypes.every((t) => ex.supportTypes.includes(t))],
   ] as const
 }
 

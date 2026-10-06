@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Card } from '@/components/Card'
 import { Icon } from '@/components/Icon'
 import type { SupportMatchResponse } from '@/services/supportMatch/types'
+import { VerdictBadge } from './MatchCard'
 
 /** 자격 미달로 제외된 공고와 사유 (접힘) */
 export function ExcludedList({
@@ -27,9 +28,10 @@ export function ExcludedList({
       {open && (
         <ul className="flex flex-col gap-2.5 border-t border-line px-6 py-4 sm:px-7">
           {items.map((x) => (
-            <li key={x.programId} className="text-sm">
+            <li key={x.programId} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+              <VerdictBadge verdict="자격 미달" />
               <span className="font-semibold text-ink">{x.title}</span>
-              <span className="ml-2 text-neg">{x.failedReasons.join(' · ')}</span>
+              <span className="text-neg">{x.failedReasons.join(' · ')}</span>
             </li>
           ))}
         </ul>

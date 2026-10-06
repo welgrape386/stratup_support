@@ -7,6 +7,7 @@ import { Icon } from '@/components/Icon'
 import { SectionTitle } from '@/components/SectionTitle'
 import { ExcludedList } from '@/components/support/ExcludedList'
 import { MatchCard } from '@/components/support/MatchCard'
+import { NextSteps } from '@/components/support/NextSteps'
 import { ProfileChips } from '@/components/support/ProfileChips'
 import { cx } from '@/lib/cx'
 import { Container } from '@/layout/Container'
@@ -24,6 +25,7 @@ const EXAMPLES = [
   '29살이고 서울 마포구에서 디저트 카페를 준비 중인 예비창업자예요. 인테리어 자금이 3천만원 정도 모자라요.',
   '36살, 경기도에서 음식점 창업을 준비하고 있어요. 창업 교육과 멘토링을 받고 싶어요.',
   '카페 창업을 생각 중인데 어떤 지원을 받을 수 있는지 모르겠어요.',
+  '31살 예비창업자예요. 인천에서 소상공인으로 분식집을 열려고 하는데 보증 지원이 필요해요.',
 ]
 
 const LOADING_STEPS = ['조건 해석 중', '공고 검색 중', '자격 확인 중']
@@ -269,8 +271,10 @@ export function SupportMatch() {
             ) : visible.length === 0 ? (
               <p className="text-sm text-muted">이 유형에 해당하는 공고가 없어요. 다른 탭을 확인해보세요.</p>
             ) : (
-              visible.map((r) => <MatchCard key={r.program.id} result={r} />)
+              visible.map((r) => <MatchCard key={r.program.id} result={r} profile={res.profile} />)
             )}
+
+            <NextSteps steps={res.nextSteps} conditional={res.conditional} profile={res.profile} />
 
             <ExcludedList items={res.excluded} defaultOpen={res.results.length === 0} />
 
