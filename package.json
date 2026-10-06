@@ -8,9 +8,11 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
-    "check:support": "vite-node src/services/supportMatch/match.check.ts"
+    "check:support": "vite-node src/services/supportMatch/match.check.ts",
+    "extract:rules": "vite-node scripts/extract-rules.ts --"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router-dom": "^7.18.4"
