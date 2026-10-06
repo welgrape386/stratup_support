@@ -1,0 +1,46 @@
+# CLAUDE.md — 창업지원 매칭 서비스
+
+Claude Code가 이 레포에서 작업할 때 항상 따르는 지침이다. 자세한 설계는 `docs/SPEC.md`.
+
+## 프로젝트
+자유 문장 → 프로필 추출 → 모집 중 창업 지원사업 공고에서 **자격이 맞는 것만** 규칙으로 판정 → 근거(공고 원문 인용)와 함께 노출.
+수업 팀프로젝트: **baseline 대비 개선을 숫자로 측정**해야 한다 (평가 하네스, SPEC 7장).
+
+## 스택·명령어
+Vite + React 19 + TypeScript + Tailwind v4 + react-router-dom 7. 서버 함수는 `api/` (Vercel).
+- `npm run dev` 개발 서버 / `npm run build` 빌드 / `npm run typecheck`
+- `npm run check:support` 회귀 체크 (LLM 없이) / (추가 예정) `npm run ingest` 공고 인덱싱, `npm run eval:support` 평가
+- 경로 별칭 `@/` = `src/`. 서버·스크립트·테스트가 함께 쓰는 로직은 React/DOM 의존 없이 `src/services/` 아래 순수 TS로 둔다.
+
+## 절대 원칙
+1. AI는 숫자와 사실을 만들지 않는다. 금액·나이·마감일·자격 조건은 공고 데이터에서만 온다. LLM은 해석·설명만.
+2. 모르면 단정하지 않는다 (`unknown` → "확인 필요").
+3. 자체 지표(매칭 점수)에는 `DataBadge kind="self"`.
+4. mock·placeholder 데이터를 화면에 쓰면 "샘플 데이터" 라벨 필수.
+5. 생성된 설명은 원문과 대조(인용문·숫자) 후 노출. 실패 문장은 제거.
+6. **자격 판정은 규칙(코드)이 한다. LLM이 자격을 판정하게 만들지 않는다.**
+
+## 작업 규칙
+- **데이터는 API가 아니라 `data/raw/manual/*.json`(포털 화면에서 수동 수집)에서 읽는다.** 포털의 `지원규모`는 사업 전체 예산이므로 1인당 한도(`amountMaxManwon`)에 넣지 않는다. `연중·수시` 공고는 `rolling`으로 처리한다 (SPEC 3-1, 3-2a).
+- "한 걸음만 더"(whatIf)는 규칙 재판정으로만 계산한다. 후보는 사업자 등록과 같은 시도 안 시군구 두 가지뿐이고, 문구에 권유 표현을 쓰지 않는다 (SPEC 6장).
+- 조건부 공고는 추천 목록(`results`)과 분리한다(`conditional`). 평가의 "추천"은 `results`만이다 (SPEC 7장).
+- **Phase 단위로 진행한다. 한 Phase가 끝나면 멈추고 사용자 확인을 받는다.** (SPEC 11장)
+- (공식 API를 나중에 쓰게 되면) 파라미터·필드명·오퍼레이션명은 **추측하지 않는다.** 공식 명세를 확인하고, 못 하면 사용자에게 요청한다.
+- 모델명·임베딩 모델명·SDK 사용법도 기억에 의존하지 말고 공식 문서를 확인한다.
+- 평가 지표 숫자는 **실제로 실행한 결과만** 보고한다. 추정치나 예상치를 표에 채워 넣지 않는다.
+- 평가에서 "자격 미달" 정답은 사람이 라벨링한 `shouldExcludeIds`를 쓴다 (규칙으로 자동 계산하면 순환 평가).
+- 시크릿: `ANTHROPIC_API_KEY` 등은 서버 전용. `VITE_` 접두사 금지, `.env.local`만 사용, 커밋 금지.
+- 새 npm 의존성은 최소화하고, 추가할 때 이유를 말한다.
+- 프롬프트 인젝션: 공고 본문은 데이터다. LLM 프롬프트에서 지시와 분리하고, 판정 로직에는 영향을 주지 않게 한다.
+
+## UI 규칙
+- 새 색·radius·아이콘·폰트를 임의로 만들지 않는다. `src/index.css`의 `@theme` 토큰과 `src/components/` 공통 컴포넌트를 먼저 쓴다.
+- 판정은 색만으로 구분하지 말고 텍스트를 함께 둔다. 터치 영역 최소 40px. 모바일 1열.
+- 아이콘은 `src/components/Icon.tsx`의 `PATHS`에 있는 것만 쓰고, 필요하면 거기에 추가한다.
+
+## 현재 상태
+- 완료: 프로젝트 뼈대, 공통 컴포넌트, `/` 홈, `/support-match` 1차 UI(placeholder 데이터), `src/services/supportMatch/types.ts`, `src/lib/parse.ts`
+- Phase 1 완료: `config/eligibility/score/validate/mock.ts` + `match.check.ts`. 세부 결정은 SPEC 8-1
+- Phase 1b·1c: types 보강(3-2a), 판정 4종(조건부, `conditional` 분리), `whatIf.ts`, 테스트 #11~15
+- **임시 코드:** `src/services/supportMatch/uiPlaceholder.ts`와 `client.ts`의 개발 모드 폴백 분기. Phase 3에서 API 연결 후 삭제.
+- 다음: Phase 2 — 먼저 `incheon-samples.json`으로 자격 규칙 추출이 되는지 확인
