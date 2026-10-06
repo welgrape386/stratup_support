@@ -20,6 +20,8 @@ export type EligibilityRule = { quote: string; section: RuleSection } & (
 export type SupportProgram = {
   id: string
   source: 'manual' | 'kstartup' | 'bizinfo' | 'mock'
+  /** 수동 수집한 포털 이름 (예: '인천시 혜택·지원'). 수집 범위 표시에 쓴다 */
+  portal?: string
   sourceId: string
   title: string
   agency: string
@@ -104,6 +106,10 @@ export type SupportMatchResponse = {
   conditional: MatchResult[]
   excluded: { programId: string; title: string; failedReasons: string[] }[]
   nextSteps: NextStep[]
+  /** 결과 상단 요약 (명세 6-D). 숫자·날짜·quote 는 전부 판정 결과에서 계산한다 */
+  summary: MatchSummary
+  /** 수집 범위 (명세 6-F) */
+  coverage: Coverage
   meta: {
     dataSource: 'live' | 'mock'
     parser: 'llm' | 'rule'
@@ -122,6 +128,25 @@ export type NextStep = {
   programIds: string[]
   /** 공고별, 바꾼 뒤에도 남는 unknown 규칙 수 */
   unknownAfter: Record<string, number>
+}
+
+export type MatchSummary = {
+  eligibleCount: number
+  checkCount: number
+  conditionalCount: number
+  /** 추천(results) 중 마감이 가장 급한 공고. 상시 모집(rolling)은 제외 */
+  urgent: { programId: string; title: string; daysLeft: number; applyEnd: string } | null
+  /** 해당 안 됨 사유 중 근거 quote 가 공고 원문 대조를 통과한 것 하나 */
+  caution: { programId: string; title: string; quote: string; section: RuleSection } | null
+}
+
+export type Coverage = {
+  sources: { portal: string; count: number }[]
+  total: number
+  /** 수집 기준일 중 가장 최근 */
+  asOf: string | null
+  /** 수집한 지역 한정 공고의 시도 목록 (전국 공고는 포함하지 않음) */
+  regions: string[]
 }
 
 export type SupportMatchError = {

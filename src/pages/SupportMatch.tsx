@@ -5,9 +5,11 @@ import { Card } from '@/components/Card'
 import { Icon } from '@/components/Icon'
 import { Container } from '@/layout/Container'
 import { PageHeader } from '@/layout/PageHeader'
+import { ruleProfile } from '@/lib/parse'
+import { loadInput, saveInput } from '@/lib/supportMatchInput'
 import { MAX_TEXT_LENGTH } from '@/services/supportMatch/config'
+import { shortSido } from '@/services/supportMatch/eligibility'
 import { inputError } from '@/services/supportMatch/validate'
-import { loadInput, saveInput } from './supportMatchInput'
 
 const EXAMPLES = [
   '29살이고 서울 마포구에서 디저트 카페를 준비 중인 예비창업자예요. 인테리어 자금이 3천만원 정도 모자라요.',
@@ -16,12 +18,23 @@ const EXAMPLES = [
   '31살 예비창업자예요. 인천에서 소상공인으로 분식집을 열려고 하는데 보증 지원이 필요해요.',
 ]
 
+// 빈칸은 대괄호로 표시해 고치기 쉽게 한다. 규칙 파서는 대괄호 안을 읽지 않는다
+const DRAFT = '저는 [나이]살이고 [지역]에서 [업종]을 준비/운영 중인 [예비창업자/사업자]예요. [필요한 지원]이 필요해요.'
+
 /** /support-match — 입력만 받는다. 결과는 /support-match/results */
 export function SupportMatch() {
   const navigate = useNavigate()
   // "조건 다시 입력"으로 돌아오면 이전 문장이 채워져 있다
   const [text, setText] = useState(() => loadInput()?.text ?? '')
   const canSubmit = !inputError(text)
+  // 입력하는 동안 규칙 파서가 읽은 항목을 보여줘서 빠진 정보를 바로 알 수 있게 한다
+  const p = ruleProfile(text, undefined)
+  const read = [
+    { label: '나이', value: p.age.value != null ? `${p.age.value}세` : null },
+    { label: '지역', value: p.sido.value ? [shortSido(p.sido.value), p.sigungu.value].filter(Boolean).join(' ') : null },
+    { label: '업종', value: p.industryCategory.value },
+  ]
+  const hasBlank = /\[[^\]]*\]/.test(text)
 
   const submit = () => {
     if (!canSubmit) return
@@ -49,12 +62,41 @@ export function SupportMatch() {
             placeholder="예) 29살이고 서울 마포구에서 디저트 카페를 준비 중인 예비창업자예요. 인테리어 자금이 3천만원 정도 모자라요."
             className="w-full rounded-input border border-line bg-surface px-4 py-3 text-sm leading-relaxed text-ink-soft outline-none focus:border-primary-400"
           />
-          <p className="mt-1 text-right text-xs text-faint tnum">
-            {text.length}/{MAX_TEXT_LENGTH}
-          </p>
+          <div className="mt-1 flex items-start justify-between gap-3">
+            <p className="text-xs text-faint" aria-live="polite">
+              {text.trim() && (
+                <>
+                  인식된 정보{' '}
+                  {read.map((r, i) => (
+                    <span key={r.label}>
+                      {i > 0 && ', '}
+                      {r.value ? (
+                        <span className="font-semibold text-ink-soft">
+                          {r.label} {r.value}
+                        </span>
+                      ) : (
+                        <span>{r.label} 없음</span>
+                      )}
+                    </span>
+                  ))}
+                  {hasBlank && <span className="text-warn"> · 대괄호 [ ] 부분을 내 상황으로 바꿔주세요</span>}
+                </>
+              )}
+            </p>
+            <p className="shrink-0 text-xs text-faint tnum">
+              {text.length}/{MAX_TEXT_LENGTH}
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setText(DRAFT)}
+            className="min-h-10 rounded-chip border border-line-strong bg-surface px-3.5 text-[13px] font-semibold text-ink-soft hover:bg-bg"
+          >
+            초안으로 시작하기
+          </button>
           {EXAMPLES.map((ex, i) => (
             <button
               key={ex}

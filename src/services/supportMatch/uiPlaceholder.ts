@@ -5,20 +5,18 @@
    meta.dataSource='mock' 이므로 화면에 "샘플 데이터" 라벨이 뜬다.
    ========================================================================= */
 
-import { extractAge, extractCategory, extractManwon, extractRegion } from '@/lib/parse'
+import { ruleProfile } from '@/lib/parse'
 import { kstDate, partition } from './eligibility'
 import { mockPrograms } from './mock'
 import { daysLeft, scoreMatch, sortResults } from './score'
 import type {
-  BizStage,
   MatchResult,
   SupportMatchRequest,
   SupportMatchResponse,
   SupportProgram,
-  SupportType,
-  TargetGroup,
   UserProfile,
 } from './types'
+import { buildSummary, coverageOf } from './summary'
 import { ruleHeadline } from './validate'
 import { nextSteps } from './whatIf'
 
@@ -27,6 +25,7 @@ import { nextSteps } from './whatIf'
 const bojeungSample = (fetchedAt: string): SupportProgram => ({
   id: 'mock:incheon-sosang-bojeung',
   source: 'mock',
+  portal: '인천시 혜택·지원',
   sourceId: 'incheon-sosang-bojeung',
   title: '소상공인보증지원',
   agency: '인천광역시',
@@ -51,39 +50,20 @@ const bojeungSample = (fetchedAt: string): SupportProgram => ({
   summary: '담보력이 부족한 인천 소재 소상공인의 채무를 보증',
   url: 'https://www.incheon.go.kr/eco/ECO030201',
   contact: '소상공인정책과 / 인천신용보증재단 보증사업부/ 032-260-1543',
-  fields: {},
+  // 포털 원문 항목 (incheon-samples.json 그대로). 요약의 주의 문장 quote 를 이 원문과 대조한다
+  fields: {
+    사업소개: '담보력이 부족한 인천 소재 소상공인의 채무를 보증함으로써 자금융통을 원활히 하여 소상공인 경영안정 도모',
+    신청기간: '2026.1.1.~ 2026.12.31. (연중)',
+    지원대상: '인천시에 사업장을 둔 소상공인(특례보증 별 상이)',
+    지원규모: '3,250억원',
+    지원내용: '소상공인 특례보증 및 이차보전 지원(연1.5~2%, 3년간)',
+    지원조건: '인천시에 사업자 등록을 한 소상공인',
+    지원제외기준: '타시도 소상공인',
+  },
   fetchedAt,
   reviewed: true,
 })
 
-function ruleProfile(text: string, overrides: SupportMatchRequest['overrides']): UserProfile {
-  const o = overrides ?? {}
-  const region = extractRegion(text)
-  const age = (o.age as number | undefined) ?? extractAge(text)
-  const sido = (o.sido as string | undefined) ?? region.sido
-  const targetGroups: TargetGroup[] = []
-  if (age != null && age <= 39) targetGroups.push('청년')
-  if (/소상공인|자영업/.test(text)) targetGroups.push('소상공인')
-  const needs: SupportType[] = []
-  if (/모자라|부족|자금|대출|지원금/.test(text)) needs.push('융자', '보조금')
-  if (/교육/.test(text)) needs.push('교육')
-  if (/멘토링/.test(text)) needs.push('멘토링')
-  return {
-    age: { value: age },
-    sido: { value: sido },
-    // 시도를 칩으로 고치면 문장 속 시군구는 더 이상 맞지 않을 수 있으므로 비운다
-    sigungu: { value: o.sido ? null : region.sigungu },
-    bizStage: { value: (o.bizStage as BizStage | undefined) ?? (/예비/.test(text) ? '예비창업' : null) },
-    industryCategory: { value: (o.industryCategory as string | undefined) ?? extractCategory(text) },
-    industryText: { value: null },
-    targetGroups,
-    needs,
-    fundingGapManwon: { value: extractManwon(text) },
-    budgetManwon: { value: null },
-    experienceYears: { value: null },
-    freeText: text,
-  }
-}
 
 export function buildUiPlaceholder(
   text: string,
@@ -92,7 +72,7 @@ export function buildUiPlaceholder(
   const today = kstDate(new Date())
   const profile = ruleProfile(text, overrides)
   const programs = [...mockPrograms(today), bojeungSample(today)]
-  const { eligible, conditional, excluded } = partition(programs, profile, today)
+  const { eligible, conditional, excluded, rejected } = partition(programs, profile, today)
 
   const toResult = ({ program, verdict, rules }: (typeof eligible)[number]): MatchResult => {
     const { eligibility: _, ...rest } = program
@@ -117,13 +97,17 @@ export function buildUiPlaceholder(
   if (!profile.bizStage.value) missing.push('bizStage')
   if (!profile.industryCategory.value) missing.push('industryCategory')
 
+  const results = sortResults(eligible.map(toResult))
+  const conditionalResults = sortResults(conditional.map(toResult))
   return {
     profile,
     missing,
-    results: sortResults(eligible.map(toResult)),
-    conditional: sortResults(conditional.map(toResult)),
+    results,
+    conditional: conditionalResults,
     excluded,
     nextSteps: nextSteps(programs, profile, today),
+    summary: buildSummary({ results, conditional: conditionalResults, rejected }),
+    coverage: coverageOf(programs),
     meta: {
       dataSource: 'mock',
       parser: 'rule',

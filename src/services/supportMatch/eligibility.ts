@@ -134,22 +134,25 @@ export function judgeProgram(program: SupportProgram, profile: UserProfile) {
 }
 
 /** 마감 공고는 버리고 셋으로 나눈다. eligible(충족·확인 필요)만 추천 목록(results)이 된다.
-    conditional(조건부)은 "한 걸음만 더" 영역, excluded(자격 미달)는 사유와 함께 접힌 목록 */
+    conditional(조건부)은 "한 걸음만 더" 영역, excluded(자격 미달)는 사유 목록.
+    rejected 는 excluded 와 같은 공고를 규칙 판정과 함께 담는다 (요약의 주의 문장용) */
 export function partition(programs: SupportProgram[], profile: UserProfile, today: string) {
   type Judged = { program: SupportProgram } & ReturnType<typeof judgeProgram>
   const eligible: Judged[] = []
   const conditional: Judged[] = []
   const excluded: SupportMatchResponse['excluded'] = []
+  const rejected: Judged[] = []
   for (const program of programs) {
     if (!isOpen(program, today)) continue
     const j = judgeProgram(program, profile)
-    if (j.verdict === '자격 미달')
+    if (j.verdict === '자격 미달') {
+      rejected.push({ program, ...j })
       excluded.push({
         programId: program.id,
         title: program.title,
         failedReasons: j.rules.filter((x) => x.result === 'fail').map((x) => x.reason),
       })
-    else (j.verdict === '조건부' ? conditional : eligible).push({ program, ...j })
+    } else (j.verdict === '조건부' ? conditional : eligible).push({ program, ...j })
   }
-  return { eligible, conditional, excluded }
+  return { eligible, conditional, excluded, rejected }
 }

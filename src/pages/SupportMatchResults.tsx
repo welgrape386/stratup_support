@@ -15,7 +15,7 @@ import { Container } from '@/layout/Container'
 import { PageHeader } from '@/layout/PageHeader'
 import { fetchSupportMatch, SupportMatchApiError } from '@/services/supportMatch/client'
 import type { SupportMatchRequest, SupportMatchResponse, UserProfile } from '@/services/supportMatch/types'
-import { loadInput, saveInput } from './supportMatchInput'
+import { loadInput, saveInput } from '@/lib/supportMatchInput'
 
 const LOADING_STEPS = ['조건 해석 중', '공고 검색 중', '자격 확인 중']
 
