@@ -1,4 +1,4 @@
-import type { SupportMatchRequest, SupportMatchResponse } from './types'
+import type { SupportMatchError, SupportMatchRequest, SupportMatchResponse } from './types'
 import { buildUiPlaceholder } from './uiPlaceholder'
 import { inputError } from './validate'
 
@@ -10,11 +10,30 @@ export class SupportMatchApiError extends Error {
   }
 }
 
+/** 화면이 바로 쓰는 필드가 다 있는가. 없으면 렌더링 중 깨지므로 오류 카드로 보낸다 */
+function isMatchResponse(b: unknown): b is SupportMatchResponse {
+  const r = b as Partial<SupportMatchResponse> | null
+  return (
+    !!r &&
+    typeof r === 'object' &&
+    !!r.profile &&
+    !!r.meta &&
+    !!r.summary &&
+    Array.isArray(r.missing) &&
+    Array.isArray(r.results) &&
+    Array.isArray(r.conditional) &&
+    Array.isArray(r.excluded) &&
+    Array.isArray(r.nextSteps)
+  )
+}
+
+const NOT_JSON = Symbol('not-json')
+
 /**
  * POST /api/support-match.
- * Phase 3 에서 API 가 생기기 전까지는, 개발 모드에서 API 를 쓸 수 없을 때
- * (네트워크 오류·404·5xx·JSON 이 아닌 응답) UI 확인용 placeholder 응답을 돌려준다. meta.dataSource='mock' 이라 화면에 샘플 라벨이 뜬다.
- * 실제 자격 판정 결과가 아니다.
+ * Phase 3 에서 API 가 생기기 전까지는 개발·배포 모두, API 가 404·5xx 이거나 JSON 이 아닌 응답이면
+ * UI 확인용 placeholder 응답을 돌려준다. meta.dataSource='mock' 이라 화면에 "샘플 데이터" 띠가 뜬다.
+ * 실제 자격 판정 결과가 아니다. (네트워크 오류는 개발 모드에서만 폴백)
  */
 export async function fetchSupportMatch(req: SupportMatchRequest): Promise<SupportMatchResponse> {
   const invalid = inputError(req.text)
@@ -33,12 +52,12 @@ export async function fetchSupportMatch(req: SupportMatchRequest): Promise<Suppo
     throw new SupportMatchApiError('INTERNAL', '서버에 연결하지 못했어요.')
   }
 
-  const body = await res.json().catch(() => null)
-  if (import.meta.env.DEV && (res.status === 404 || res.status >= 500 || body === null))
-    return buildUiPlaceholder(text, req.overrides)
+  const body: unknown = await res.json().catch(() => NOT_JSON)
+  if (res.status === 404 || res.status >= 500 || body === NOT_JSON) return buildUiPlaceholder(text, req.overrides)
   if (!res.ok) {
-    const e = body?.error
+    const e = (body as SupportMatchError | null)?.error
     throw new SupportMatchApiError(e?.code ?? 'INTERNAL', e?.message ?? '잠시 후 다시 시도해주세요.')
   }
-  return body as SupportMatchResponse
+  if (!isMatchResponse(body)) throw new SupportMatchApiError('INTERNAL', '결과를 읽지 못했어요. 잠시 후 다시 시도해주세요.')
+  return body
 }
