@@ -28,7 +28,7 @@ const values = (s?: string) => (s ? numbersIn(s).map((x) => x.n) : [])
 function structuredNumbers(p: SupportProgram): number[] {
   return [
     p.amountMaxManwon,
-    ...p.eligibility.flatMap((r) => (r.kind === 'age' ? [r.min, r.max] : [])),
+    ...p.eligibility.flatMap((g) => g.rules).flatMap((r) => (r.kind === 'age' ? [r.min, r.max] : [])),
     ...values(p.applyEnd),
     ...values(p.interestRate),
   ].filter((n): n is number => n != null)

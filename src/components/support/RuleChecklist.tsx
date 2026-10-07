@@ -1,9 +1,15 @@
 import { cx } from '@/lib/cx'
 import { ageRange, shortSido } from '@/services/supportMatch/eligibility'
-import type { EligibilityRule, RuleResult, RuleSection, UserProfile } from '@/services/supportMatch/types'
+import type {
+  DuplicatePolicy,
+  EligibilityRule,
+  ExceptionClause,
+  RuleResult,
+  UserProfile,
+} from '@/services/supportMatch/types'
 
 /** 공고 원문 인용 + 출처 항목 */
-export function Quote({ children, section }: { children: string; section?: RuleSection }) {
+export function Quote({ children, section }: { children: string; section?: string }) {
   return (
     <p className="mt-1 border-l-2 border-line pl-3 text-xs text-faint">
       &ldquo;{children}&rdquo;
@@ -66,24 +72,52 @@ function mine(r: EligibilityRule, p: UserProfile): string | null {
   }
 }
 
-/** B. 조건 체크리스트: 규칙마다 판정 + 공고 조건 + 내 값 + 근거 (명세 6-B) */
-export function RuleChecklist({ rules, profile }: { rules: RuleResult[]; profile: UserProfile }) {
+const ROW = 'flex flex-col gap-1 px-3.5 py-2.5 text-sm'
+
+/** 판정 기호 + 항목 + 조건 / 판정 글자 */
+function Head({ mark, label, children }: { mark: (typeof MARK)[keyof typeof MARK]; label: string; children?: string }) {
+  return (
+    <span className="flex items-start justify-between gap-3">
+      <span className="text-ink-soft">
+        <span aria-hidden="true" className={cx('mr-1.5 font-bold', mark.cls)}>
+          {mark.sym}
+        </span>
+        <span className="font-semibold text-ink">{label}</span> {children}
+      </span>
+      <span className={cx('shrink-0 text-xs font-bold', mark.cls)}>{mark.text}</span>
+    </span>
+  )
+}
+
+/** B. 조건 체크리스트: 규칙마다 판정 + 공고 조건 + 내 값 + 근거 (명세 6-B).
+    아래에 판정에 넣지 않는 원문 조항(예외 조항·중복 지원)을 따로 붙인다 */
+export function RuleChecklist({
+  rules,
+  profile,
+  duplicatePolicy,
+  exceptions,
+}: {
+  rules: RuleResult[]
+  profile: UserProfile
+  duplicatePolicy: DuplicatePolicy
+  exceptions: ExceptionClause[]
+}) {
   return (
     <ul className="flex flex-col divide-y divide-line rounded-panel border border-line bg-surface">
-      {rules.map((x) => {
+      {rules.map((x, i) => {
         const m = MARK[x.result]
         const my = mine(x.rule, profile)
+        const groupStart = x.group && rules[i - 1]?.group?.id !== x.group.id
         return (
-          <li key={x.rule.kind + x.rule.quote} className="flex flex-col gap-1 px-3.5 py-2.5 text-sm">
-            <span className="flex items-start justify-between gap-3">
-              <span className="text-ink-soft">
-                <span aria-hidden="true" className={cx('mr-1.5 font-bold', m.cls)}>
-                  {m.sym}
-                </span>
-                <span className="font-semibold text-ink">{LABEL[x.rule.kind]}</span> {condition(x.rule)}
+          <li key={x.rule.kind + x.rule.quote} className={cx(ROW, x.group && 'pl-6')}>
+            {groupStart && (
+              <span className="-ml-2.5 text-xs font-bold text-muted">
+                아래 조건 중 하나만 맞으면 돼요 · 그룹 판정 {MARK[x.group!.result].text}
               </span>
-              <span className={cx('shrink-0 text-xs font-bold', m.cls)}>{m.text}</span>
-            </span>
+            )}
+            <Head mark={m} label={LABEL[x.rule.kind]}>
+              {condition(x.rule)}
+            </Head>
             <span className="text-xs text-muted">
               {x.rule.kind === 'other'
                 ? '공고에서 직접 확인이 필요한 조건이에요'
@@ -93,6 +127,25 @@ export function RuleChecklist({ rules, profile }: { rules: RuleResult[]; profile
           </li>
         )
       })}
+      {/* 예외 조항: 규칙으로 바꾸지 않고 원문 그대로. 판정에 반영하지 않는다 */}
+      {exceptions.map((c) => (
+        <li key={c.section + c.quote} className={ROW}>
+          <Head mark={MARK.unknown} label="예외 조항" />
+          <span className="text-xs text-muted">본인이 해당하는지 공고 원문에서 확인이 필요해요</span>
+          <Quote section={c.section}>{c.quote}</Quote>
+        </li>
+      ))}
+      <li className={ROW}>
+        <span className="flex items-start justify-between gap-3 text-ink-soft">
+          <span className="font-semibold text-ink">중복 지원</span>
+          <span className="shrink-0 text-xs font-bold text-muted">{duplicatePolicy.status}</span>
+        </span>
+        {duplicatePolicy.status === '미확인' ? (
+          <span className="text-xs text-muted">공고 원문에 중복 수혜 관련 문구가 없어요. 운영기관에 확인이 필요해요</span>
+        ) : (
+          <Quote section={duplicatePolicy.section}>{duplicatePolicy.quote}</Quote>
+        )}
+      </li>
     </ul>
   )
 }

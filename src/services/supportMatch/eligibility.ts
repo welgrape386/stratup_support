@@ -117,20 +117,52 @@ export function isActionable(x: RuleResult, profile: UserProfile): boolean {
   return false
 }
 
-/** fail 0: unknown(other 포함) 있으면 확인 필요, 없으면 자격 충족.
-    fail 1개이고 바꿀 수 있으면 조건부, 그 외 자격 미달 */
+/** 공고의 모든 규칙 (그룹 무시) */
+export const allRules = (p: SupportProgram) => p.eligibility.flatMap((g) => g.rules)
+
+/** 실제로 공고를 막는 fail 인가. any 그룹 안의 fail 은 그룹 전체가 fail 일 때만 */
+export const isBlocking = (x: RuleResult) => x.result === 'fail' && (x.group?.result ?? 'fail') === 'fail'
+
+/** any 그룹: 하나라도 pass → pass, 전부 fail → fail, 그 외 unknown */
+function anyResult(rs: RuleResult[]): RuleResult['result'] {
+  if (rs.some((x) => x.result === 'pass')) return 'pass'
+  return rs.length && rs.every((x) => x.result === 'fail') ? 'fail' : 'unknown'
+}
+
+/** 판정 단위로 묶어 등급을 낸다 (명세 4-1·4-1a). all 그룹은 규칙 하나가 한 단위, any 그룹은 그룹 하나가 한 단위.
+    fail 0: unknown(other 포함) 있으면 확인 필요, 없으면 자격 충족.
+    fail 단위 1개이고 바꿀 수 있으면 조건부, 그 외 자격 미달 */
 export function judgeProgram(program: SupportProgram, profile: UserProfile) {
-  const rules = program.eligibility.map((rule) => judgeRule(rule, profile))
-  const fails = rules.filter((x) => x.result === 'fail')
+  const rules: RuleResult[] = []
+  const units: { result: RuleResult['result']; actionable: boolean }[] = []
+  program.eligibility.forEach((g, id) => {
+    const rs = g.rules.map((rule) => judgeRule(rule, profile))
+    if (g.mode === 'all') {
+      rules.push(...rs)
+      for (const x of rs) units.push({ result: x.result, actionable: isActionable(x, profile) })
+      return
+    }
+    const result = anyResult(rs)
+    rules.push(...rs.map((x) => ({ ...x, group: { id, result } })))
+    units.push({ result, actionable: rs.some((x) => isActionable(x, profile)) })
+  })
+  const fails = units.filter((u) => u.result === 'fail')
   const verdict: MatchVerdict =
     fails.length === 0
-      ? rules.some((x) => x.result === 'unknown')
+      ? units.some((u) => u.result === 'unknown')
         ? '확인 필요'
         : '자격 충족'
-      : fails.length === 1 && isActionable(fails[0], profile)
+      : fails.length === 1 && fails[0].actionable
         ? '조건부'
         : '자격 미달'
   return { verdict, rules }
+}
+
+/** 조건부 공고의 사유: 개업(사업자 등록) 또는 사업장 소재지(시군구). 조건부가 아니면 null.
+    공고마다 하나만 고르므로 사유별 집계가 서로 겹치지 않는다 */
+export function conditionalField(rules: RuleResult[], profile: UserProfile): 'bizStage' | 'sigungu' | null {
+  const x = rules.find((r) => isBlocking(r) && isActionable(r, profile))
+  return x ? (x.rule.kind === 'bizStage' ? 'bizStage' : 'sigungu') : null
 }
 
 /** 마감 공고는 버리고 셋으로 나눈다. eligible(충족·확인 필요)만 추천 목록(results)이 된다.
@@ -150,7 +182,7 @@ export function partition(programs: SupportProgram[], profile: UserProfile, toda
       excluded.push({
         programId: program.id,
         title: program.title,
-        failedReasons: j.rules.filter((x) => x.result === 'fail').map((x) => x.reason),
+        failedReasons: j.rules.filter(isBlocking).map((x) => x.reason),
       })
     } else (j.verdict === '조건부' ? conditional : eligible).push({ program, ...j })
   }

@@ -6,6 +6,7 @@
    ========================================================================= */
 
 import { ruleProfile } from '@/lib/parse'
+import { verifiedDuplicatePolicy, exceptionClauses } from './clauses'
 import { kstDate, partition } from './eligibility'
 import { mockPrograms } from './mock'
 import { daysLeft, scoreMatch, sortResults } from './score'
@@ -37,7 +38,9 @@ const bojeungSample = (fetchedAt: string): SupportProgram => ({
   applyEnd: '2026-12-31',
   rolling: true,
   status: '모집중',
-  eligibility: [
+  // 공고 원문에 중복 수혜 문구가 없다
+  duplicatePolicy: { status: '미확인' },
+  eligibility: [{ mode: 'all', rules: [
     { kind: 'region', sido: ['인천광역시'], quote: '타시도 소상공인', section: '지원제외기준' },
     {
       kind: 'bizStage',
@@ -46,7 +49,7 @@ const bojeungSample = (fetchedAt: string): SupportProgram => ({
       section: '지원조건',
     },
     { kind: 'targetGroup', anyOf: ['소상공인'], quote: '인천시에 사업장을 둔 소상공인', section: '지원대상' },
-  ],
+  ] }],
   summary: '담보력이 부족한 인천 소재 소상공인의 채무를 보증',
   url: 'https://www.incheon.go.kr/eco/ECO030201',
   contact: '소상공인정책과 / 인천신용보증재단 보증사업부/ 032-260-1543',
@@ -77,7 +80,7 @@ export function buildUiPlaceholder(
   const toResult = ({ program, verdict, rules }: (typeof eligible)[number]): MatchResult => {
     const { eligibility: _, ...rest } = program
     return {
-      program: rest,
+      program: { ...rest, duplicatePolicy: verifiedDuplicatePolicy(program) },
       verdict,
       // 의미 검색이 없으므로(Phase 3) 유사도 0. 규칙 충족률·니즈 일치만 반영된다
       score: scoreMatch({ similarity: 0, rules, needs: profile.needs, supportTypes: program.supportTypes }),
@@ -87,6 +90,7 @@ export function buildUiPlaceholder(
         .filter((x) => x.result === 'pass')
         .map((x) => ({ text: x.reason, quote: x.rule.quote, chunkId: '' })),
       cautions: [],
+      exceptions: exceptionClauses(program),
       daysLeft: daysLeft(program, today),
     }
   }
@@ -106,7 +110,7 @@ export function buildUiPlaceholder(
     conditional: conditionalResults,
     excluded,
     nextSteps: nextSteps(programs, profile, today),
-    summary: buildSummary({ results, conditional: conditionalResults, rejected }),
+    summary: buildSummary({ results, conditional: conditionalResults, rejected, profile }),
     coverage: coverageOf(programs),
     meta: {
       dataSource: 'mock',

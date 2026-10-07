@@ -17,6 +17,19 @@ export type EligibilityRule = { quote: string; section: RuleSection } & (
   | { kind: 'other'; text: string } // 구조화 불가 → 항상 unknown
 )
 
+/** 규칙 그룹 (명세 4-1a). all = 모두 충족, any = 하나라도 충족("A 또는 B").
+    공고는 그룹 배열을 가지며 그룹끼리는 모두 충족해야 한다. 기본은 all 그룹 하나 */
+export type RuleGroup = { mode: 'all' | 'any'; rules: EligibilityRule[] }
+
+/** 중복 수혜 제한 (명세 3-2b). 원문에 문구가 있을 때만 가능·불가·조건부, 없으면 반드시 미확인.
+    section 은 quote 가 나온 포털 항목 이름(fields 의 키) */
+export type DuplicatePolicy =
+  | { status: '가능' | '불가' | '조건부'; quote: string; section: string }
+  | { status: '미확인' }
+
+/** 규칙으로 바꾸지 않은 예외 문구 (명세 6-B). 판정에 쓰지 않고 체크리스트에 '?'로만 보여준다 */
+export type ExceptionClause = { quote: string; section: string }
+
 export type SupportProgram = {
   id: string
   source: 'manual' | 'kstartup' | 'bizinfo' | 'mock'
@@ -39,7 +52,8 @@ export type SupportProgram = {
   /** 연중·수시 모집 → daysLeft=null, "상시 모집" */
   rolling: boolean
   status: '모집중' | '모집예정' | '마감'
-  eligibility: EligibilityRule[]
+  eligibility: RuleGroup[]
+  duplicatePolicy: DuplicatePolicy
   summary: string
   url: string
   contact?: string
@@ -84,6 +98,8 @@ export type RuleResult = {
   rule: EligibilityRule
   result: 'pass' | 'fail' | 'unknown'
   reason: string
+  /** any 그룹에 속한 규칙이면 그룹 번호와 그룹 판정. 이 규칙이 fail 이어도 그룹이 pass 면 걸리지 않는다 */
+  group?: { id: number; result: 'pass' | 'fail' | 'unknown' }
 }
 
 export type MatchResult = {
@@ -94,6 +110,8 @@ export type MatchResult = {
   headline: string
   reasons: { text: string; quote: string; chunkId: string }[]
   cautions: { text: string; quote: string; chunkId: string }[]
+  /** 예외 조항 (판정에 반영하지 않음) */
+  exceptions: ExceptionClause[]
   daysLeft: number | null
 }
 
@@ -133,7 +151,8 @@ export type NextStep = {
 export type MatchSummary = {
   eligibleCount: number
   checkCount: number
-  conditionalCount: number
+  /** 조건부 공고를 사유별로 나눈 수. 공고마다 사유가 하나라 겹치지 않는다 (합 = conditional 길이) */
+  conditional: { bizStage: number; sigungu: number }
   /** 추천(results) 중 마감이 가장 급한 공고. 상시 모집(rolling)은 제외 */
   urgent: { programId: string; title: string; daysLeft: number; applyEnd: string } | null
   /** 해당 안 됨 사유 중 근거 quote 가 공고 원문 대조를 통과한 것 하나 */

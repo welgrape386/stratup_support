@@ -222,7 +222,12 @@ export function SupportMatchResults() {
               visible.map((r) => <MatchCard key={r.program.id} result={r} profile={res.profile} />)
             )}
 
-            <NextSteps steps={res.nextSteps} conditional={res.conditional} profile={res.profile} />
+            <NextSteps
+              steps={res.nextSteps}
+              conditional={res.conditional}
+              profile={res.profile}
+              counts={res.summary.conditional}
+            />
 
             <ExcludedList items={res.excluded} defaultOpen={res.results.length === 0} />
 

@@ -41,8 +41,8 @@
    ▼
 [응답] { profile, missing, results[], excluded[], meta }
 
-[오프라인] scripts/ingest-programs.ts  (수동 또는 하루 1회)
-   data/raw/manual/*.json 읽기 → 정규화 → 자격조건 구조화(LLM, 원문 quote 필수) → 청크 분할 → 임베딩
+[오프라인] scripts/ingest-programs.ts  (하루 1회)
+   공공데이터 API 수집(3-1) → 정규화 → 자격조건 구조화(LLM, 원문 quote 필수) → 청크 분할 → 임베딩
    → data/programs.index.json
 ```
 
@@ -52,22 +52,36 @@
 
 ## 3. 데이터
 
-### 3-1. 데이터 출처 (변경: API 키 없이 포털 화면에서 수동 수집)
+### 3-1. 데이터 출처 (변경: 공공데이터 API만 사용, 2026-10-07 팀 회의)
 
-K-Startup·기업마당 API 키는 신청하지 않기로 했다. 대신 **공고 포털 화면(예: 인천시 「혜택·지원」)의 항목을 팀이 직접 옮겨 `data/raw/manual/*.json`에 기록**하고, 같은 수집·구조화·인덱싱 파이프라인에 태운다.
+**크롤링·스크래핑은 쓰지 않는다. 실제 수집은 공공데이터 API로만 한다.** (포털 HTML을 긁는 코드도 만들지 않는다)
 
-- 항목 이름이 포털에 있는 그대로(`사업소개`, `신청기간`, `지원대상`, `지원조건`, `지원제외기준`, `지원내용`, `신청방법`, 담당자 연락처 등)를 `fields`에 문자열로 저장한다. 템플릿과 샘플: `data/raw/manual/_TEMPLATE.json`, `incheon-samples.json`.
-- **가능하면 캡처 이미지 대신 화면 텍스트를 복사·붙여넣기 한다.** 이미지를 옮겨 적다가 글자가 틀리면 `quote` 원문 대조가 실패한다.
-- 규모는 수십 건 수준이 현실적이다. 평가용 라벨링에는 오히려 유리하다 (정답 공고를 사람이 전부 알 수 있음).
-- 수집한 날짜(`capturedAt`)와 출처 URL을 반드시 기록한다. 마감 판정과 평가 재현성에 쓰인다.
-- 나중에 크롤링·API로 자동화한다면 그 전에 사이트 이용약관·공공누리 표시를 확인한다.
-- 공식 API는 후순위 옵션으로 남겨 둔다 (그때 명세는 추측하지 말고 확인).
+- `data/raw/manual/*.json`(포털 화면을 사람이 옮긴 것)은 **개발용 샘플(fixture)** 로만 남긴다. 삭제하지 않는다. 판정·UI·회귀 체크·Phase 2 추출 실험에 계속 쓴다. 템플릿: `_TEMPLATE.json`, 샘플: `incheon-samples.json`.
+- API 응답도 원문 항목을 `fields`에 문자열로 그대로 저장한다 (quote 검증 대상). 항목 이름은 API 필드 설명을 따른다 (예: `aply_trgt_ctnt` → `신청대상내용`).
+- 수집 시각(`fetchedAt`)과 공고 상세 URL을 반드시 기록한다.
+- 파라미터·필드명·오퍼레이션명은 **아래 표의 공식 명세에서 확인한 것만** 쓴다. 표에 없는 건 추측하지 말고 명세를 다시 확인하거나 사용자에게 요청한다.
+- 인증키는 사용자가 준비한다. 서버 전용 환경 변수(`.env.local`, `VITE_` 금지). **API 구현은 키가 준비된 뒤 시작한다.**
+
+#### 3-1a. 공공데이터 API 후보 (2026-10-07 공식 명세 확인)
+
+확인 방법: 공공데이터포털 상세 페이지(`data.go.kr/data/{번호}/openapi.do`)에 들어 있는 Swagger 명세, 기업마당 API 상세 페이지(`bizinfo.go.kr/apiDetail.do?id=bizinfoApi`), 정부24는 포털이 참조하는 odcloud Swagger.
+
+| 후보 | 제공 | 엔드포인트·오퍼레이션 (명세 그대로) | 쓸모 있는 응답 필드 (명세 설명) | 확인한 제약 | 확인 못 한 것 |
+|---|---|---|---|---|---|
+| **K-Startup 조회서비스** (data.go.kr 15125364) | 창업진흥원 | `apis.data.go.kr/B552735/kisedKstartupService01` `/getAnnouncementInformation01`(지원사업 공고), `/getBusinessInformation01`(통합공고 지원사업) 외 2개 | `biz_pbanc_nm` 공고명, `aply_trgt_ctnt` 신청대상내용, `aply_excl_trgt_ctnt` 신청제외대상내용, `biz_enyy` 창업기간, `biz_trgt_age` 대상연령, `supt_regin` 지역명, `pbanc_rcpt_bgng_dt`/`pbanc_rcpt_end_dt` 접수 시작·종료(yyyyMMdd), `rcrt_prgs_yn` 모집진행여부, `pbanc_ctnt` 공고내용, `prch_cnpl_no` 담당자 연락처, `detl_pg_url` | `serviceKey` 필수, `page`·`perPage`, `cond[필드::LIKE/EQ/GTE/LTE]` 필터, `returnType` json/xml(기본 xml). 개발계정 10,000건/일. 이용허락범위 제한 없음 | 1인당 지원 한도 필드는 명세에 없음. 실제 응답 값 형식(예: `biz_trgt_age` 값이 파라미터 설명의 목록과 같은지)은 키 발급 후 호출로 확인 |
+| **기업마당 지원사업정보** | 중소벤처기업부(기업마당) | `https://www.bizinfo.go.kr/uss/rss/bizinfoApi.do` (GET) | `pblancNm` 공고명, `pblancId`, `trgetNm` 지원대상, `bsnsSumryCn` 사업개요, `reqstBeginEndDe` 신청기간(예 `20220727 ~ 20220930`), `jrsdInsttNm`/`excInsttNm`, `refrncNm` 문의처, `hashTags`(지역 포함), `pblancUrl` | `crtfcKey` 필수(**기업마당에서 별도 발급**, data.go.kr 키 아님), `dataType` rss/json, `searchCnt`, `searchLclasId`(06=창업), `hashtags`, `pageUnit`, `pageIndex` | 자격 조건이 `trgetNm`(예 "중소기업")·개요 수준이라 세부 조건은 첨부 공고문(`printFlpthNm`)에 있음. 트래픽 제한·이용 조건 문구는 확인 못 함 |
+| **중소벤처기업부_사업공고** (data.go.kr 15113297) | 중소벤처기업부 | `apis.data.go.kr/1421000/mssBizService_v2` `/getbizList_v2` | `title`, `dataContents`(옵션), `applicationStartDate`/`applicationEndDate`(옵션), `viewUrl`, `fileUrl` | `serviceKey`·`pageNo`·`numOfRows` 필수, `startDate`/`endDate`는 **공고 등록일** 기준. XML. 개발계정 100건/일 | 자격 조건 전용 필드 없음 (본문·첨부에만 있음) |
+| **대한민국 공공서비스(혜택) 정보** (data.go.kr 15113968) | 행정안전부(정부24) | `api.odcloud.kr/api` `/gov24/v3/serviceList`, `/gov24/v3/serviceDetail`, `/gov24/v3/supportConditions` | 목록·상세: `지원대상`, `선정기준`, `지원내용`, `신청기한`, `문의처`. 지원조건: `JA0110`/`JA0111` 대상연령 시작·종료, `JA1101` 예비창업자, `JA1102` 영업중, `JA1201`~`JA1299`·`JA2201`~`JA2299` 업종, `JA2101` 중소기업 등 | `serviceKey`(query) 또는 `Authorization` 헤더, `page`·`perPage`, `cond[서비스ID::EQ]` 등. 개발계정 10,000. 이용허락범위 제한 없음 | 창업 공고만 고르는 필터 값(`서비스분야` 값 목록), 지원조건 코드의 실제 값 형식은 호출로 확인 필요. 마감이 있는 공고형 사업이 얼마나 들어 있는지 모름 |
+
+우선순위 제안: **K-Startup**(창업 전용, 연령·창업기간·지역·제외대상 필드가 따로 있음) → 정부24 지원조건(연령·예비창업·업종이 코드화) → 기업마당(지자체 공고 범위 보완). 중기부 사업공고는 자격 필드가 없어 후순위.
+주의: API의 연령·창업기간 필드도 **원문 근거(quote)** 로 쓰고 규칙 추출·quote 검증(3-3)을 그대로 거친다. 지자체 공고(인천시 등)가 API에 없으면 범위 밖으로 두고 화면의 수집 범위(6-F)에 표시한다.
 
 ### 3-2. 정규화 스키마
 
 `src/services/supportMatch/types.ts`에 이미 정의되어 있다 (`SupportProgram`, `EligibilityRule`, `ProgramChunk`, `UserProfile`, 응답 타입). 이 파일이 단일 출처다.
 
 - 자격 규칙 6종: `age` / `region` / `bizStage` / `industry` / `targetGroup` / `other`
+- `eligibility`는 **규칙 그룹 배열** `{ mode: 'all' | 'any', rules[] }[]`이다 (4-1a). 그룹끼리는 모두 충족(AND). 조건이 "A 또는 B"면 `any` 그룹. 보통 공고는 `all` 그룹 하나 = 예전 규칙 배열과 같은 동작
 - **모든 규칙은 원문 근거 `quote`를 가진다.** 수집 시 quote가 원문에 실제로 들어있지 않으면 그 규칙은 버린다. 애매한 조건은 `other`로 둔다.
 - `amountMaxManwon`은 공고에 명시된 경우만. 추정 금지. 파싱 실패 필드는 `undefined` (0이나 빈 문자열 금지).
 
@@ -87,11 +101,23 @@ K-Startup·기업마당 API 키는 신청하지 않기로 했다. 대신 **공�
 | 제외기준 | `지원제외기준`("타시도 소상공인")은 가능하면 **양성 규칙으로 변환**(예: `region.sido=['인천광역시']`). 변환 불가하면 `other` | 판정 로직을 규칙 6종 그대로 유지 |
 | `bizStage` | "사업자 등록을 한 …" = `allowed: ['업력3년이하','업력7년이하','기창업']` (예비창업 제외) | 예비창업자에게는 fail → "한 걸음만 더" 후보 |
 
+#### 3-2b. 중복 지원 가능 여부 `duplicatePolicy` (2026-10-07)
+
+`{ status: '가능' | '불가' | '조건부' | '미확인', quote, section }`. `section`은 quote가 나온 원문 항목 이름(`fields`의 키).
+- **원문에 중복 수혜 제한 문구가 있을 때만** 가능·불가·조건부. 없으면 반드시 `'미확인'`(quote 없음). 추정 금지.
+- quote가 `fields[section]` 원문에 그대로 없으면 표시 직전에 `'미확인'`으로 내린다 (`clauses.ts` `verifiedDuplicatePolicy`).
+- 결과 카드(배지)와 체크리스트(한 줄)에 표시만 한다. **공고 간 충돌 계산은 하지 않는다.**
+
 ### 3-3. 수집 스크립트 `scripts/ingest-programs.ts`
 
-1. `data/raw/manual/*.json`(수동 수집 원본, 커밋 대상) 읽기
+1. 공공데이터 API 호출(3-1a) → 원본 응답 저장. (개발 중에는 `data/raw/manual/*.json` fixture로 같은 경로를 시험)
 2. `normalize(raw) → SupportProgram`
-3. 자격조건 추출(LLM 1회): 공고 본문 → `EligibilityRule[]` (JSON 스키마), quote 검증
+3. 자격조건 추출(LLM 1회): 공고 본문 → `RuleGroup[]` (JSON 스키마), quote 검증. 추출 프롬프트 규칙:
+   - **"또는"·"이거나"** 로 이어진 서로 다른 종류의 조건은 `any` 그룹으로 묶는다 (예: "만 39세 이하 또는 여성" → any[age max 39, targetGroup 여성]). **"및"·"이고"·"이면서"** 는 `all`. 둘 중 어느 것인지 애매하면 `other`로 남긴다 (any를 all로 잘못 넣으면 자격 있는 사람이 미달로 빠짐).
+   - 같은 종류 안의 나열("청년·여성")은 지금처럼 `targetGroup.anyOf` 하나로 둔다.
+   - 중복 수혜 문구가 있으면 `duplicatePolicy`(quote 필수), 없으면 `'미확인'`.
+   - "지원제외기준", "~별 상이", "단 ~는 제외" 같은 예외 문구는 양성 규칙으로 바로 바꿀 수 있는 경우(3-2a 지역 제외)만 규칙으로, 나머지는 억지로 바꾸지 않는다 (6-B 예외 조항).
+   (Phase 2 보류 중이라 `scripts/extract-rules.ts`에는 아직 반영하지 않았다. LLM을 다시 돌릴 때 반영)
 4. 청크 분할: 섹션 단위, 300~600자
 5. 임베딩 후 `data/programs.index.json` 저장 (`{ programs, chunks, builtAt }`)
 6. 실행: `npm run ingest` (`vite-node scripts/ingest-programs.ts`)
@@ -120,6 +146,15 @@ K-Startup·기업마당 API 키는 신청하지 않기로 했다. 대신 **공�
 등급 (6-A 신호등과 같음): `자격 충족`(fail 0, unknown 0) / `확인 필요`(fail 0, unknown ≥ 1, **`other` 포함**) / `조건부`(fail 정확히 1개 + 그 규칙이 한 걸음으로 풀 수 있는 항목, 6-C → `conditional`) / `자격 미달`(그 외 fail → `excluded`).
 추천 목록 `results`에는 `자격 충족`·`확인 필요`만 들어간다.
 마감(`status:'마감'` 또는 `applyEnd < 오늘`)은 메인 목록에서 제외.
+
+### 4-1a. 규칙 그룹 (AND/OR)
+
+- `all` 그룹: 규칙 하나하나가 판정 단위 (기존과 같음).
+- `any` 그룹: 그룹 전체가 한 단위. 하나라도 pass → pass, 전부 fail → fail, 그 외(unknown 섞임) → unknown.
+- 등급은 단위로 센다: fail 단위 0 → 충족/확인 필요, fail 단위 1개이고 한 걸음으로 풀리면(any 그룹은 그 안에 actionable 규칙이 있으면) 조건부, 그 외 미달.
+- any 그룹이 pass면 그 안의 fail 규칙은 제외 사유·"맞지 않는 조건"·요약 주의 문장에 쓰지 않는다 (`isBlocking`).
+- 체크리스트는 any 그룹 규칙을 묶어 "아래 조건 중 하나만 맞으면 돼요 · 그룹 판정"을 보여준다.
+- 점수(4-2) 충족률은 지금처럼 규칙 단위로 센다 (any 그룹 안 fail도 충족률을 낮춤, 알려진 한계).
 
 ### 4-2. 매칭 점수 (서비스 자체 지표)
 
@@ -171,7 +206,7 @@ K-Startup·기업마당 API 키는 신청하지 않기로 했다. 대신 **공�
 | 표시 | 판정 | 조건 | 위치 |
 |---|---|---|---|
 | 초록 | 자격 충족 | fail 0, unknown 0 | 메인 목록 |
-| 노랑 | 조건부 ("한 걸음 더") | fail이 정확히 1개이고 그 규칙이 **한 걸음으로 풀 수 있는 항목**(6-C 2번: 사업자 등록, 같은 시도 안 시군구). 나머지는 pass/unknown | 추천 목록과 분리된 `conditional` 배열 → 메인 목록 아래 "한 걸음만 더" 영역. **추천으로 세지 않는다** |
+| 노랑 | 조건부. 배지 라벨은 사유별: `bizStage` → "개업 후 신청 가능", `sigungu` → "사업장 소재지 조건" | fail이 정확히 1개이고 그 규칙이 **한 걸음으로 풀 수 있는 항목**(6-C 2번: 사업자 등록, 같은 시도 안 시군구). 나머지는 pass/unknown | 추천 목록과 분리된 `conditional` 배열 → 메인 목록 아래 "한 걸음만 더" 영역. **추천으로 세지 않는다** |
 | 회색 | 확인 필요 | fail 0, unknown ≥ 1 (입력 누락 또는 `other` 규칙) | 메인 목록. 사유 + `contact` 문의처 |
 | 빨강 | 해당 안 됨 | 위에 해당하지 않는 fail | 접힌 "제외된 공고" |
 
@@ -180,6 +215,16 @@ K-Startup·기업마당 API 키는 신청하지 않기로 했다. 대신 **공�
 ### B. 조건 체크리스트 (카드 펼침)
 규칙마다 한 줄: `✔/✘/?` + 항목 라벨 + 공고 조건 + **내 값** + 근거. 예) `✔ 나이 만 39세 이하 (내 나이 27)`, `✘ 사업자 등록 필요 (내 상태: 예비창업)`.
 근거는 `quote`와 출처 항목(`section`)을 보여준다. 나이는 "만 나이 기준" 문구 표시.
+
+규칙 아래에 판정에 넣지 않는 원문 조항을 붙인다:
+- **예외 조항** (1단계, 구현됨): "지원제외기준" 항목 전체, 다른 항목의 "~별 상이", "단, ~", "~ 제외"·"예외" 구절. 판정 `?`, 원문 quote, 출처 항목. 이미 규칙 quote로 쓰인 구절은 빼고, **등급·점수에 반영하지 않는다** (`clauses.ts` `exceptionClauses`).
+- **중복 지원** 한 줄: `duplicatePolicy` 상태 + quote (미확인이면 "운영기관에 확인 필요").
+
+예외 조항 2단계 (제안, 미구현): 사용자가 예외 조항 줄에서 "해당 없음"을 직접 체크하면 그 줄을 `본인 확인`으로 바꾼다.
+- 체크 값은 요청의 `overrides`처럼 클라이언트가 보내는 `selfChecks: { programId, quote }[]`로 둔다 (서버는 저장하지 않음).
+- 판정: 2단계에서 "본인 확인 안 된 예외 조항이 남아 있으면 자격 충족 → 확인 필요"로 바꾸고, 모두 본인 확인되면 원래 등급으로 되돌린다. 체크로 fail을 pass로 바꾸는 경로는 두지 않는다 (규칙 판정은 그대로).
+- 화면: 본인 확인 줄은 `✔`가 아닌 별도 표시("본인 확인")와 "공식 심사가 아니에요. 본인이 체크한 내용이며 최종 판단은 운영기관이 해요" 문구, `DataBadge kind="self"`.
+- 평가(7장): 본인 확인으로 바뀐 판정은 지표 계산에 쓰지 않는다 (사람 입력이 섞이면 재현 불가).
 
 ### C. 한 걸음만 더 (what-if)
 **조건 하나만 바꾸면 받을 수 있는 공고를 모아서 보여준다.** 규칙 판정 결과에서 계산하며 LLM을 쓰지 않는다. `src/services/supportMatch/whatIf.ts`.
@@ -201,6 +246,8 @@ K-Startup·기업마당 API 키는 신청하지 않기로 했다. 대신 **공�
 
 이 기능은 사용자가 사업장 위치를 일부러 바꾸도록 부추기는 용도가 아니라 **정보 제공**이다. 문구에 권유 표현("~하세요")을 쓰지 않는다.
 
+요약 집계(`summary.conditional`)는 조건부 공고를 사유별(`bizStage` / `sigungu`)로 나눈 수다. 공고마다 사유 하나만 고르므로(`conditionalField`) 구간이 겹치지 않는다: 자격 충족 + 확인 필요 + 개업 후 신청 가능 + 사업장 소재지 조건 + 해당 안 됨 = 모집 중 공고 수. 한 공고가 여러 시군구 묶음(`nextSteps`)에 나올 수 있으므로 `nextSteps`의 +N을 더해서 집계하지 않는다.
+
 한계: `BizStage`가 4구간뿐이라 "업력 1년 이상" 같은 세밀한 조건은 표현하지 못한다 (해당 규칙은 `other`).
 
 ---
@@ -209,6 +256,8 @@ K-Startup·기업마당 API 키는 신청하지 않기로 했다. 대신 **공�
 
 **1차 UI는 이미 구현되어 있다** (`src/pages/SupportMatch.tsx`, `src/components/support/*`).
 현재는 `src/services/supportMatch/uiPlaceholder.ts`의 샘플 응답으로 동작하며, Phase 3에서 API가 생기면 이 파일과 `client.ts`의 폴백 분기를 삭제한다.
+폴백 조건 (개발·배포 공통): `/api/support-match`가 404·5xx이거나 JSON이 아닌 응답 → 샘플 응답(`dataSource:'mock'`, "샘플 데이터" 띠). 네트워크 오류는 개발 모드에서만 폴백. 2xx인데 본문이 null이거나 필수 필드(`profile`·`meta`·`summary`·배열 5종)가 없으면 오류 카드.
+배포: 루트 `vercel.json`이 `/api/` 밖의 경로를 `index.html`로 rewrite한다 (SPA 새로고침·직접 주소 404 방지, `/api` 함수는 영향 없음).
 
 구성: 입력 카드(예시 칩, 글자수) → "이렇게 이해했어요" 칩(클릭 수정, 빈 핵심 필드는 점선 칩) → 요약 바(필터 탭·정렬) → 결과 카드(판정·D-day·유형 배지, 왜 맞나요 + 원문 인용, 확인이 필요해요, 조건별 판정 펼침) → 제외된 공고(접힘) → 안내 문구.
 상태: 초기 / 로딩(단계 문구 + 스켈레톤) / 성공 / 0건 / 핵심 정보 부족 / 오류 / LLM 폴백(간이 해석 배지) / mock(샘플 띠).
@@ -279,7 +328,7 @@ K-Startup·기업마당 API 키는 신청하지 않기로 했다. 대신 **공�
 | 벡터 저장 | `data/programs.index.json` + 메모리 코사인 | 수천 건 이하 |
 | reranker (B3) | **R2: cross-encoder rerank API** (임베딩 제공자가 같으면 같은 키) | R1 LLM listwise rerank는 변형(B3b)으로 인터페이스만 열어둠, R3 규칙 정렬은 B2에 포함 |
 | 메뉴 | 홈 CTA + 상단 메뉴 (이미 포함) | |
-| 공고 소스 | 포털 화면 수동 수집 (`data/raw/manual/*.json`, 3-1) | 공식 API는 후순위 옵션 |
+| 공고 소스 | **공공데이터 API만** (3-1a 후보, 크롤링·스크래핑 금지). `data/raw/manual/*.json`은 개발용 fixture | 2026-10-07 팀 회의. 키는 사용자가 준비, 구현은 키 준비 후 |
 
 ### 8-1. 판정·검증 세부 결정 (Phase 1 확정, Phase 1b 갱신)
 
@@ -309,11 +358,13 @@ api/support-match.ts                     # Vercel Function (Phase 3)
 scripts/ingest-programs.ts               # 수집·구조화·임베딩 (Phase 2)
 scripts/eval-support.ts                  # 평가 하네스 (Phase 5)
 data/programs.index.json                 # 생성물 (gitignore)
-data/raw/manual/*.json                   # 포털 수동 수집 원본 (커밋)
+data/raw/manual/*.json                   # 개발용 fixture (포털 화면을 옮긴 것, 커밋·삭제 금지)
+vercel.json                              # SPA rewrite (/api 제외)
 data/eval/users.json                     # 평가 데이터 (커밋)
 src/services/supportMatch/
   types.ts config.ts eligibility.ts score.ts validate.ts       # Phase 1
   whatIf.ts mock.ts                                            # Phase 1b
+  clauses.ts                                                   # 중복 지원·예외 조항 (판정 밖)
   bm25.ts embed.ts rerank.ts pipeline.ts                       # Phase 2~5
   client.ts uiPlaceholder.ts(임시)
   match.check.ts                                               # 15개 회귀 체크 (+ 결정 사항 체크)
@@ -343,6 +394,11 @@ LLM 없이 판정·점수·검증 로직만 assert한다. mock 3건에는 지역
 | 13 | 모든 `nextSteps` 항목 | 프로필을 바꿔 다시 판정하면 `미달` 아님 (정합성) |
 | 14 | `rolling` 공고 / `지원규모`가 총예산인 공고 | `daysLeft=null`, `amountMaxManwon` 비어 있고 총예산은 `totalBudgetText`로만 표시 |
 | 15 | 조건부 공고 | `results`에 없고 `conditional`에만. `nextSteps`의 공고는 모두 `conditional`에 있고 항목은 사업자 등록·시군구뿐 |
+
+| any-1~4 | any 그룹 (4-1a) | 하나라도 pass → pass / 섞이면 unknown / 전부 fail → 미달 / 그룹 fail이 시군구로 풀리면 조건부이고 재판정 충족 |
+| dup | `duplicatePolicy` quote가 원문에 없음 | `미확인` |
+| 예외 | "별 상이"·지원제외기준 | 예외 조항으로 표시, 규칙 quote와 겹치면 제외, 판정 변화 없음 |
+| 요약 | 판정 구간 | 충족·확인 필요·개업 후·소재지·미달이 겹치지 않고 합 = 모집 중 공고 수 |
 
 추가 확인: `npm run build`, `npm run typecheck`, 데스크톱·모바일 화면.
 

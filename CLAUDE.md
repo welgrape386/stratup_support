@@ -21,11 +21,12 @@ Vite + React 19 + TypeScript + Tailwind v4 + react-router-dom 7. 서버 함수�
 6. **자격 판정은 규칙(코드)이 한다. LLM이 자격을 판정하게 만들지 않는다.**
 
 ## 작업 규칙
-- **데이터는 API가 아니라 `data/raw/manual/*.json`(포털 화면에서 수동 수집)에서 읽는다.** 포털의 `지원규모`는 사업 전체 예산이므로 1인당 한도(`amountMaxManwon`)에 넣지 않는다. `연중·수시` 공고는 `rolling`으로 처리한다 (SPEC 3-1, 3-2a).
+- **데이터 수집은 공공데이터 API로만 한다. 크롤링·스크래핑은 쓰지 않는다** (SPEC 3-1, 후보는 3-1a). `data/raw/manual/*.json`은 개발용 fixture로만 쓰고 삭제하지 않는다. API 구현은 사용자가 키를 준비한 뒤 시작한다. 포털의 `지원규모`는 사업 전체 예산이므로 1인당 한도(`amountMaxManwon`)에 넣지 않는다. `연중·수시` 공고는 `rolling`으로 처리한다 (SPEC 3-1, 3-2a).
 - "한 걸음만 더"(whatIf)는 규칙 재판정으로만 계산한다. 후보는 사업자 등록과 같은 시도 안 시군구 두 가지뿐이고, 문구에 권유 표현을 쓰지 않는다 (SPEC 6장).
 - 조건부 공고는 추천 목록(`results`)과 분리한다(`conditional`). 평가의 "추천"은 `results`만이다 (SPEC 7장).
 - **Phase 단위로 진행한다. 한 Phase가 끝나면 멈추고 사용자 확인을 받는다.** (SPEC 11장)
-- (공식 API를 나중에 쓰게 되면) 파라미터·필드명·오퍼레이션명은 **추측하지 않는다.** 공식 명세를 확인하고, 못 하면 사용자에게 요청한다.
+- 공공데이터 API의 파라미터·필드명·오퍼레이션명은 **추측하지 않는다.** SPEC 3-1a(공식 명세 확인 결과)에 있는 것만 쓰고, 없으면 공식 명세를 확인하거나 사용자에게 요청한다.
+- `eligibility`는 규칙 그룹 `{ mode: 'all'|'any', rules[] }[]` (SPEC 4-1a). 중복 지원(`duplicatePolicy`)은 원문에 문구가 없으면 반드시 `'미확인'`. 예외 문구는 규칙으로 억지로 바꾸지 않고 체크리스트 "예외 조항"으로만 (SPEC 3-2b, 6-B).
 - 모델명·임베딩 모델명·SDK 사용법도 기억에 의존하지 말고 공식 문서를 확인한다.
 - 평가 지표 숫자는 **실제로 실행한 결과만** 보고한다. 추정치나 예상치를 표에 채워 넣지 않는다.
 - 평가에서 "자격 미달" 정답은 사람이 라벨링한 `shouldExcludeIds`를 쓴다 (규칙으로 자동 계산하면 순환 평가).
@@ -42,6 +43,7 @@ Vite + React 19 + TypeScript + Tailwind v4 + react-router-dom 7. 서버 함수�
 - 완료: 프로젝트 뼈대, 공통 컴포넌트, `/` 홈, `/support-match` 1차 UI(placeholder 데이터), `src/services/supportMatch/types.ts`, `src/lib/parse.ts`
 - Phase 1 완료: `config/eligibility/score/validate/mock.ts` + `match.check.ts`. 세부 결정은 SPEC 8-1
 - Phase 1b·1c: types 보강(3-2a), 판정 4종(조건부, `conditional` 분리), `whatIf.ts`, 테스트 #11~15
-- **임시 코드:** `src/services/supportMatch/uiPlaceholder.ts`와 `client.ts`의 개발 모드 폴백 분기. Phase 3에서 API 연결 후 삭제.
+- **임시 코드:** `src/services/supportMatch/uiPlaceholder.ts`와 `client.ts`의 샘플 폴백 분기(개발·배포 공통: 404·5xx·JSON 아님 → `dataSource:'mock'`). Phase 3에서 API 연결 후 삭제. 배포 SPA rewrite는 `vercel.json`.
+- 2026-10-07 팀 회의 반영: 공공데이터 API 방침(구현 전), `duplicatePolicy`·예외 조항 표시, 조건부 사유 라벨("개업 후 신청 가능"/"사업장 소재지 조건")과 겹치지 않는 요약 구간, any 그룹 + 테스트. 예외 조항 "해당 없음" 본인 확인은 2단계(SPEC 6-B 제안, 미구현)
 - **보류:** Phase 2(LLM 규칙 추출)·Phase 3(API 연동) — 당분간 `ANTHROPIC_API_KEY`를 쓰지 않는다. `scripts/extract-rules.ts`, `data/eval/rule-gold.json`, `@anthropic-ai/sdk`는 나중에 쓰므로 지우지 않는다.
 - Phase 4(키 없이 먼저): `/support-match`에 A(신호등)·B(`RuleChecklist`)·C(`NextSteps`) 반영. 데이터는 `uiPlaceholder.ts`가 mock + 실제 규칙 코드(partition·score·whatIf)로 만든다. 조건부는 `results`가 아니라 C 영역에만.

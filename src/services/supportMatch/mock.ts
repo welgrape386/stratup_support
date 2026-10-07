@@ -14,6 +14,7 @@ export function mockPrograms(today: string): SupportProgram[] {
     fetchedAt: today,
     reviewed: false,
     rolling: false,
+    duplicatePolicy: { status: '미확인' },
   } as const
   return [
     {
@@ -28,10 +29,10 @@ export function mockPrograms(today: string): SupportProgram[] {
       applyEnd: addDays(today, 12),
       summary: '만 19~34세 예비창업자 및 창업 3년 이내 기업',
       fields: { 지원대상: '만 19~34세 예비창업자 및 창업 3년 이내 기업' },
-      eligibility: [
+      eligibility: [{ mode: 'all', rules: [
         { kind: 'age', min: 19, max: 34, quote: '만 19~34세 예비창업자 및 창업 3년 이내 기업', section: '지원대상' },
         { kind: 'bizStage', allowed: ['예비창업', '업력3년이하'], quote: '만 19~34세 예비창업자 및 창업 3년 이내 기업', section: '지원대상' },
-      ],
+      ] }],
     },
     {
       ...base,
@@ -44,10 +45,10 @@ export function mockPrograms(today: string): SupportProgram[] {
       applyEnd: addDays(today, 5),
       summary: '만 19~39세, 업력 없는 예비창업자',
       fields: { 지원대상: '만 19~39세, 업력 없는 예비창업자' },
-      eligibility: [
+      eligibility: [{ mode: 'all', rules: [
         { kind: 'age', min: 19, max: 39, quote: '만 19~39세, 업력 없는 예비창업자', section: '지원대상' },
         { kind: 'bizStage', allowed: ['예비창업'], quote: '만 19~39세, 업력 없는 예비창업자', section: '지원대상' },
-      ],
+      ] }],
     },
     {
       ...base,
@@ -60,10 +61,10 @@ export function mockPrograms(today: string): SupportProgram[] {
       summary: '만 19~39세 청년 (예비)창업자',
       fields: { 지원대상: '만 19~39세 청년 (예비)창업자', 신청기간: '연중 수시' },
       rolling: true,
-      eligibility: [
+      eligibility: [{ mode: 'all', rules: [
         { kind: 'age', min: 19, max: 39, quote: '만 19~39세 청년 (예비)창업자', section: '지원대상' },
         { kind: 'bizStage', allowed: ['예비창업', '업력3년이하'], quote: '만 19~39세 청년 (예비)창업자', section: '지원대상' },
-      ],
+      ] }],
     },
   ]
 }

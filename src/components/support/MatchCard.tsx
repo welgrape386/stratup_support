@@ -4,6 +4,7 @@ import { Card } from '@/components/Card'
 import { DataBadge } from '@/components/DataBadge'
 import { Icon } from '@/components/Icon'
 import { cx } from '@/lib/cx'
+import { conditionalField, isBlocking } from '@/services/supportMatch/eligibility'
 import type { MatchResult, MatchVerdict, UserProfile } from '@/services/supportMatch/types'
 import { Quote, RuleChecklist } from './RuleChecklist'
 
@@ -25,12 +26,15 @@ const VERDICT: Record<MatchVerdict, { tone: 'pos' | 'neutral' | 'warn' | 'neg'; 
   '자격 미달': { tone: 'neg', label: '해당 안 됨' },
 }
 
-export function VerdictBadge({ verdict }: { verdict: MatchVerdict }) {
+// 조건부(노랑)는 풀 수 있는 조건 종류로 사유를 나눈다 (안내 톤, 권유 표현 없음)
+const CONDITIONAL_LABEL = { bizStage: '개업 후 신청 가능', sigungu: '사업장 소재지 조건' } as const
+
+export function VerdictBadge({ verdict, label }: { verdict: MatchVerdict; label?: string }) {
   const v = VERDICT[verdict]
   return (
     <Badge tone={v.tone}>
       <span aria-hidden="true" className="mr-1.5 size-1.5 rounded-full bg-current" />
-      {v.label}
+      {label ?? v.label}
     </Badge>
   )
 }
@@ -60,7 +64,9 @@ function Section({
 export function MatchCard({ result: r, profile }: { result: MatchResult; profile: UserProfile }) {
   const [open, setOpen] = useState(false)
   const p = r.program
-  const failed = r.rules.filter((x) => x.result === 'fail')
+  const failed = r.rules.filter(isBlocking)
+  const cField = r.verdict === '조건부' ? conditionalField(r.rules, profile) : null
+  const dup = p.duplicatePolicy
   const unknown = r.rules.filter((x) => x.result === 'unknown')
   const meta = [
     p.agency,
@@ -78,13 +84,14 @@ export function MatchCard({ result: r, profile }: { result: MatchResult; profile
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <VerdictBadge verdict={r.verdict} />
+        <VerdictBadge verdict={r.verdict} label={cField ? CONDITIONAL_LABEL[cField] : undefined} />
         <DayBadge daysLeft={r.daysLeft} />
         {p.supportTypes.map((t) => (
           <Badge key={t} tone={t === '융자' ? 'violet' : 'info'}>
             {t}
           </Badge>
         ))}
+        <Badge tone={dup.status === '불가' ? 'warn' : 'neutral'}>중복 지원 {dup.status}</Badge>
         {p.source === 'mock' && <Badge tone="neutral">샘플</Badge>}
       </div>
 
@@ -170,7 +177,9 @@ export function MatchCard({ result: r, profile }: { result: MatchResult; profile
         </button>
       </div>
 
-      {open && <RuleChecklist rules={r.rules} profile={profile} />}
+      {open && (
+        <RuleChecklist rules={r.rules} profile={profile} duplicatePolicy={dup} exceptions={r.exceptions} />
+      )}
     </Card>
   )
 }

@@ -1,7 +1,7 @@
 import { Badge } from '@/components/Badge'
 import { Card } from '@/components/Card'
 import { SectionTitle } from '@/components/SectionTitle'
-import type { MatchResult, NextStep, UserProfile } from '@/services/supportMatch/types'
+import type { MatchResult, MatchSummary, NextStep, UserProfile } from '@/services/supportMatch/types'
 import { MatchCard } from './MatchCard'
 
 /** C. 한 걸음만 더 (명세 6-C). 조건부 공고는 추천 목록(results)과 분리해 여기서만 보여준다.
@@ -10,10 +10,13 @@ export function NextSteps({
   steps,
   conditional,
   profile,
+  counts,
 }: {
   steps: NextStep[]
   conditional: MatchResult[]
   profile: UserProfile
+  /** 사유별 공고 수. 공고마다 사유가 하나라 합이 조건부 공고 수와 같다 */
+  counts: MatchSummary['conditional']
 }) {
   if (steps.length === 0 && conditional.length === 0) return null
   const title = (id: string) => conditional.find((r) => r.program.id === id)?.program.title ?? id
@@ -26,6 +29,16 @@ export function NextSteps({
           조건 하나만 맞지 않는 공고예요. 추천 목록에는 넣지 않았어요. 아래 조건이 달라지면 지원 대상이 될 수
           있지만, 다른 조건은 공고에서 확인이 필요해요.
         </p>
+        {conditional.length > 0 && (
+          <p className="text-sm text-ink-soft">
+            {[
+              counts.bizStage && `개업 후 신청 가능 ${counts.bizStage}건`,
+              counts.sigungu && `사업장 소재지 조건 ${counts.sigungu}건`,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </p>
+        )}
         {steps.length > 0 && (
           <ul className="flex flex-col gap-3">
             {steps.map((s) => (
